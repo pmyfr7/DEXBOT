@@ -11,6 +11,9 @@ mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTop
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
 
+// Admin ID
+const ADMIN_ID = '6949308046';
+
 // Schemas
 const userSchema = new mongoose.Schema({
   telegramId: String,
@@ -312,7 +315,7 @@ bot.on('message', async (ctx) => {
       });
       await payment.save();
       await ctx.reply('ممنون! مدرک پرداختیت ثبت شد. منتظر تأیید ادمین باش 📅');
-      await bot.telegram.sendMessage('6949308046', `پرداخت جدید از ${user.username} برای ${months} ماه VIP. مدرک: ${payment.proof}`);
+      await bot.telegram.sendMessage(ADMIN_ID, `پرداخت جدید از ${user.username || 'کاربر بدون نام'} برای ${months} ماه VIP. مدرک: ${payment.proof}`);
     } else if (['issue', 'complaint', 'suggestion'].includes(type)) {
       const feedback = new Feedback({
         userId: ctx.from.id,
@@ -327,9 +330,9 @@ bot.on('message', async (ctx) => {
         suggestion: 'مرسی از پیشنهادت! به تیممون فرستادم، خیلی خوبه 💡',
       };
       await ctx.reply(responses[type]);
-      await bot.telegram.sendMessage('6949308046', `${type} از ${user.username}: ${ctx.message.text}`);
+      await bot.telegram.sendMessage(ADMIN_ID, `${type} از ${user.username || 'کاربر بدون نام'}: ${ctx.message.text}`);
     } else if (type === 'admin_message') {
-      await bot.telegram.sendMessage('6949308046', `پیام از ${user.username}: ${ctx.message.text}`);
+      await bot.telegram.sendMessage(ADMIN_ID, `پیام از ${user.username || 'کاربر بدون نام'}: ${ctx.message.text}`);
       await ctx.reply('پیامت برای ادمین فرستاده شد! 😊');
     }
     ctx.session.waitingFor = null;
@@ -338,19 +341,19 @@ bot.on('message', async (ctx) => {
 
 // Admin commands
 bot.command('upload_signal', async (ctx) => {
-  if (ctx.from.id.toString() !== '6949308046') return;
+  if (ctx.from.id.toString() !== ADMIN_ID) return;
   await ctx.reply('سیگنال جدید می‌خوای آپلود کنی؟ 📊\nعکس‌ها و متن سیگنال رو بفرست، بعد بگو برای کیه (Regular/VIP):');
   ctx.session.waitingFor = 'signal_upload';
 });
 bot.on('photo', async (ctx) => {
-  if (ctx.session.waitingFor === 'signal_upload' && ctx.from.id.toString() === '6949308046') {
+  if (ctx.session.waitingFor === 'signal_upload' && ctx.from.id.toString() === ADMIN_ID) {
     ctx.session.signal = ctx.session.signal || { images: [], text: '', target: '' };
     ctx.session.signal.images.push(ctx.message.photo[0].file_id);
     await ctx.reply('عکس دریافت شد! 📸\nمی‌تونی عکس دیگه، متن، یا گروه هدف (Regular/VIP) رو بفرستی.');
   }
 });
 bot.on('text', async (ctx) => {
-  if (ctx.session.waitingFor === 'signal_upload' && ctx.from.id.toString() === '6949308046') {
+  if (ctx.session.waitingFor === 'signal_upload' && ctx.from.id.toString() === ADMIN_ID) {
     if (['Regular', 'VIP'].includes(ctx.message.text)) {
       ctx.session.signal.target = ctx.message.text;
       const signal = new Signal({
