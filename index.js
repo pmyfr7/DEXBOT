@@ -11,7 +11,7 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
 
-// Admin ID
+// Admin ID and Wallet Address
 const ADMIN_ID = '6949308046';
 const WALLET_ADDRESS = '0x9aBfd1c9C4Fa9e09d871371cC84c9d48837952fe';
 
@@ -56,6 +56,23 @@ const User = mongoose.model('User', userSchema);
 const Signal = mongoose.model('Signal', signalSchema);
 const Payment = mongoose.model('Payment', paymentSchema);
 const Feedback = mongoose.model('Feedback', feedbackSchema);
+
+// Function to check if user is fully registered
+async function checkRegistration(ctx, callback) {
+  const user = await User.findOne({ telegramId: ctx.from.id });
+  if (!user || !user.joinDate) {
+    await ctx.reply('شما هنوز ثبت‌نام نکردی! 😓 لطفاً اول ثبت‌نام کن تا بتونی از این بخش استفاده کنی:', {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'ثبت‌نام کن 🚀', callback_data: 'restart_registration' }],
+        ],
+      },
+    });
+    return false;
+  }
+  await callback(ctx);
+  return true;
+}
 
 // Registration Scene
 const registrationScene = new Scenes.WizardScene(
@@ -227,16 +244,18 @@ bot.action('send_suggestion', async (ctx) => {
   ctx.session.waitingFor = 'suggestion';
 });
 bot.action('vip_subscription', async (ctx) => {
-  const keyboard = {
-    inline_keyboard: [
-      [{ text: '۱ ماهه (۲۹ دلار)', callback_data: 'vip_1month' }],
-      [{ text: '۳ ماهه (۷۸ دلار)', callback_data: 'vip_3month' }],
-      [{ text: '۶ ماهه (۱۴۸ دلار)', callback_data: 'vip_6month' }],
-      [{ text: '۱۲ ماهه (۲۷۸ دلار)', callback_data: 'vip_12month' }],
-      [{ text: 'استفاده از امتیازات 🌟', callback_data: 'redeem_points' }],
-    ],
-  };
-  await ctx.reply('یه پلن VIP انتخاب کن:\n۱ ماهه: ۲۹ دلار\n۳ ماهه: ۷۸ دلار\n۶ ماهه: ۱۴۸ دلار\n۱۲ ماهه: ۲۷۸ دلار', { reply_markup: keyboard });
+  await checkRegistration(ctx, async (ctx) => {
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: '۱ ماهه (۲۹ دلار)', callback_data: 'vip_1month' }],
+        [{ text: '۳ ماهه (۷۸ دلار)', callback_data: 'vip_3month' }],
+        [{ text: '۶ ماهه (۱۴۸ دلار)', callback_data: 'vip_6month' }],
+        [{ text: '۱۲ ماهه (۲۷۸ دلار)', callback_data: 'vip_12month' }],
+        [{ text: 'استفاده از امتیازات 🌟', callback_data: 'redeem_points' }],
+      ],
+    };
+    await ctx.reply('یه پلن VIP انتخاب کن:\n۱ ماهه: ۲۹ دلار\n۳ ماهه: ۷۸ دلار\n۶ ماهه: ۱۴۸ دلار\n۱۲ ماهه: ۲۷۸ دلار', { reply_markup: keyboard });
+  });
 });
 bot.action(/vip_(\d+)month/, async (ctx) => {
   const months = parseInt(ctx.match[1]);
@@ -251,27 +270,30 @@ bot.action(/vip_(\d+)month/, async (ctx) => {
   ctx.session.waitingFor = `payment_${months}`;
 });
 bot.action('redeem_points', async (ctx) => {
-  const user = await User.findOne({ telegramId: ctx.from.id });
-  if (user.points < 10) { // Example: 10 points for 1 month
-    await ctx.reply('امتیاز کافی نداری! باید حداقل ۱۰ امتیاز داشته باشی برای ۱ ماه VIP. 😓');
-    return;
-  }
-  user.points -= 10;
-  user.userType = 'VIP';
-  user.vipExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 1 month
-  await user.save();
-  await ctx.reply('تبریک! 🎉 اشتراک VIP برای ۱ ماه با ۱۰ امتیاز فعال شد!');
+  await checkRegistration(ctx, async (ctx) => {
+    const user = await User.findOne({ telegramId: ctx.from.id });
+    if (user.points < 10) { // Example: 10 points for 1 month
+      await ctx.reply('امتیاز کافی نداری! باید حداقل ۱۰ امتیاز داشته باشی برای ۱ ماه VIP. 😓');
+      return;
+    }
+    user.points -= 10;
+    user.userType = 'VIP';
+    user.vipExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 1 month
+    await user.save();
+    await ctx.reply('تبریک! 🎉 اشتراک VIP برای ۱ ماه با ۱۰ امتیاز فعال شد!');
+  });
 });
 bot.action('referral_stats', async (ctx) => {
-  const user = await User.findOne({ telegramId: ctx.from.id });
-  const referrals = await User.find({ referredBy: user.username });
-  const completed = referrals.filter(r => r.joinDate).length;
-  const vipReferrals = referrals.filter(r => r.userType === 'VIP').length;
-  const pointsFromReferrals = completed * 1;
-  const pointsFromVIP = vipReferrals * 3;
-  const totalPoints = pointsFromReferrals + pointsFromVIP;
-  const pointsSpent = user.points < totalPoints ? totalPoints - user.points : 0;
-  const message = `
+  await checkRegistration(ctx, async (ctx) => {
+    const user = await User.findOne({ telegramId: ctx.from.id });
+    const referrals = await User.find({ referredBy: user.username });
+    const completed = referrals.filter(r => r.joinDate).length;
+    const vipReferrals = referrals.filter(r => r.userType === 'VIP').length;
+    const pointsFromReferrals = completed * 1;
+    const pointsFromVIP = vipReferrals * 3;
+    const totalPoints = pointsFromReferrals + pointsFromVIP;
+    const pointsSpent = user.points < totalPoints ? totalPoints - user.points : 0;
+    const message = `
 📊 آمار دعوت‌های تو:
 - کل دعوت‌ها: ${referrals.length} نفر
 - ثبت‌نام کامل‌شده: ${completed} نفر (+${pointsFromReferrals} امتیاز)
@@ -282,24 +304,27 @@ bot.action('referral_stats', async (ctx) => {
 
 دوستات رو دعوت کن تا VIP بشی! 😍
 لینکت: ${user.referralLink}
-  `;
-  await ctx.reply(message, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: 'دعوت از دوستان 🎉', callback_data: 'invite_friends' }],
-      ],
-    },
+    `;
+    await ctx.reply(message, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'دعوت از دوستان 🎉', callback_data: 'invite_friends' }],
+        ],
+      },
+    });
   });
 });
 bot.action('invite_friends', async (ctx) => {
-  const user = await User.findOne({ telegramId: ctx.from.id });
-  const inviteText = `بیا به ربات ترید ما بپیوند و سیگنال‌های خفن با چارت و نقاط ورود/خروج بگیر! 🚀\nلینکم: ${user.referralLink}`;
-  await ctx.reply(`لینک دعوتت: ${user.referralLink}\n\nاینو به دوستات بفرست:\n${inviteText}`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: 'ارسال به دوستان 📤', url: `https://t.me/share/url?url=${encodeURIComponent(inviteText)}` }],
-      ],
-    },
+  await checkRegistration(ctx, async (ctx) => {
+    const user = await User.findOne({ telegramId: ctx.from.id });
+    const inviteText = `بیا به ربات ترید ما بپیوند و سیگنال‌های خفن با چارت و نقاط ورود/خروج بگیر! 🚀\nلینکم: ${user.referralLink}`;
+    await ctx.reply(`لینک دعوتت: ${user.referralLink}\n\nاینو به دوستات بفرست:\n${inviteText}`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'ارسال به دوستان 📤', url: `https://t.me/share/url?url=${encodeURIComponent(inviteText)}` }],
+        ],
+      },
+    });
   });
 });
 
@@ -442,19 +467,8 @@ setInterval(async () => {
   }
 }, 24 * 60 * 60 * 1000); // Daily update
 
-// Start bot with Webhook
-bot.launch();
-console.log('Bot running with webhook...');
-
-// Webhook for Vercel
-module.exports = async (req, res) => {
-  if (req.url === '/favicon.ico' || req.url === '/favicon.png') {
-    return res.status(404).send('Not found');
-  }
-  try {
-    await bot.handleUpdate(req.body, res);
-  } catch (error) {
-    console.error('Webhook error:', error);
-    res.status(500).send('Server error');
-  }
-};
+// Start bot only in local environment
+if (process.env.NODE_ENV !== 'production') {
+  bot.launch();
+  console.log('Bot running locally...');
+}
