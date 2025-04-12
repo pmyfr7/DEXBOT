@@ -7,12 +7,13 @@ const crypto = require('crypto');
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
 
 // Admin ID
 const ADMIN_ID = '6949308046';
+const WALLET_ADDRESS = '0x9aBfd1c9C4Fa9e09d871371cC84c9d48837952fe';
 
 // Schemas
 const userSchema = new mongoose.Schema({
@@ -184,6 +185,10 @@ bot.start(async (ctx) => {
     await ctx.reply('سلام خوش اومدی! 😍 بیا با هم ثبت‌نام کنیم! 🚀');
     return ctx.scene.enter('registration');
   }
+  if (!user.joinDate) {
+    await ctx.reply(`سلام ${user.name || 'دوست عزیز'}! 😍 به نظر می‌رسه هنوز ثبت‌نام نکردی. بیا ثبت‌نام کنیم! 🚀`);
+    return ctx.scene.enter('registration');
+  }
   await showMainMenu(ctx);
 });
 
@@ -224,18 +229,25 @@ bot.action('send_suggestion', async (ctx) => {
 bot.action('vip_subscription', async (ctx) => {
   const keyboard = {
     inline_keyboard: [
-      [{ text: '۱ ماهه (۱۰۰ تومن)', callback_data: 'vip_1month' }],
-      [{ text: '۳ ماهه (۲۵۰ تومن)', callback_data: 'vip_3month' }],
-      [{ text: '۶ ماهه (۴۵۰ تومن)', callback_data: 'vip_6month' }],
-      [{ text: '۱۲ ماهه (۸۰۰ تومن)', callback_data: 'vip_12month' }],
+      [{ text: '۱ ماهه (۲۹ دلار)', callback_data: 'vip_1month' }],
+      [{ text: '۳ ماهه (۷۸ دلار)', callback_data: 'vip_3month' }],
+      [{ text: '۶ ماهه (۱۴۸ دلار)', callback_data: 'vip_6month' }],
+      [{ text: '۱۲ ماهه (۲۷۸ دلار)', callback_data: 'vip_12month' }],
       [{ text: 'استفاده از امتیازات 🌟', callback_data: 'redeem_points' }],
     ],
   };
-  await ctx.reply('یه پلن VIP انتخاب کن:\n۱ ماهه: ۱۰۰ تومن\n۳ ماهه: ۲۵۰ تومن\n۶ ماهه: ۴۵۰ تومن\n۱۲ ماهه: ۸۰۰ تومن', { reply_markup: keyboard });
+  await ctx.reply('یه پلن VIP انتخاب کن:\n۱ ماهه: ۲۹ دلار\n۳ ماهه: ۷۸ دلار\n۶ ماهه: ۱۴۸ دلار\n۱۲ ماهه: ۲۷۸ دلار', { reply_markup: keyboard });
 });
 bot.action(/vip_(\d+)month/, async (ctx) => {
   const months = parseInt(ctx.match[1]);
-  await ctx.reply('لطفاً مدرک پرداختت رو بفرست (مثلاً اسکرین‌شات): 📸');
+  const prices = {
+    '1': 29,
+    '3': 78,
+    '6': 148,
+    '12': 278,
+  };
+  const price = prices[months];
+  await ctx.reply(`لطفاً مبلغ ${price} دلار رو به این آدرس ولت واریز کن:\n${WALLET_ADDRESS}\nبعد از واریز، رسید واریزی رو بفرست: 📸`);
   ctx.session.waitingFor = `payment_${months}`;
 });
 bot.action('redeem_points', async (ctx) => {
@@ -314,8 +326,9 @@ bot.on('message', async (ctx) => {
         createdAt: new Date(),
       });
       await payment.save();
-      await ctx.reply('ممنون! مدرک پرداختیت ثبت شد. منتظر تأیید ادمین باش 📅');
-      await bot.telegram.sendMessage(ADMIN_ID, `پرداخت جدید از ${user.username || 'کاربر بدون نام'} برای ${months} ماه VIP. مدرک: ${payment.proof}`);
+      await ctx.reply('ممنون! رسید واریزیت ثبت شد. منتظر تأیید ادمین باش 📅');
+      const userInfo = `نام: ${user.name || 'نامشخص'}\nفامیلی: ${user.surname || 'نامشخص'}\nشماره تماس: ${user.phone || 'نامشخص'}\nیوزرنیم: ${user.username || 'نامشخص'}`;
+      await bot.telegram.sendMessage(ADMIN_ID, `پرداخت جدید از ${user.username || 'کاربر بدون نام'} برای ${months} ماه VIP.\nاطلاعات کاربر:\n${userInfo}\nرسید: ${payment.proof}`);
     } else if (['issue', 'complaint', 'suggestion'].includes(type)) {
       const feedback = new Feedback({
         userId: ctx.from.id,
@@ -429,6 +442,19 @@ setInterval(async () => {
   }
 }, 24 * 60 * 60 * 1000); // Daily update
 
-// Start bot with Polling
-bot.launch({ dropPendingUpdates: true });
-console.log('Bot running with polling...');
+// Start bot with Webhook
+bot.launch();
+console.log('Bot running with webhook...');
+
+// Webhook for Vercel
+module.exports = async (req, res) => {
+  if (req.url === '/favicon.ico' || req.url === '/favicon.png') {
+    return res.status(404).send('Not found');
+  }
+  try {
+    await bot.handleUpdate(req.body, res);
+  } catch (error) {
+    console.error('Webhook error:', error);
+    res.status(500).send('Server error');
+  }
+};
