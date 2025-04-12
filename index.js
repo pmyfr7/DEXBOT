@@ -57,26 +57,55 @@ const Feedback = mongoose.model('Feedback', feedbackSchema);
 const registrationScene = new Scenes.WizardScene(
   'registration',
   async (ctx) => {
-    await ctx.reply('Please enter your name:');
+    await ctx.reply('سلام! 😍 بیا ثبت‌نام کنیم! \nاول اسمت رو بگو:', {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'لغو ثبت‌نام 🚫', callback_data: 'cancel_registration' }],
+        ],
+      },
+    });
     return ctx.wizard.next();
   },
   async (ctx) => {
-    if (!ctx.message?.text) return ctx.reply('Please send your name as text.');
+    if (!ctx.message?.text) {
+      await ctx.reply('لطفاً اسمت رو به صورت متن بفرست! 😊');
+      return;
+    }
     ctx.wizard.state.name = ctx.message.text;
-    await ctx.reply('Please enter your surname:');
+    await ctx.reply(`ممنون ${ctx.wizard.state.name}! حالا فامیلیت رو بگو: 🖌️`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'برگشت 🔙', callback_data: 'back_to_name' }],
+          [{ text: 'لغو ثبت‌نام 🚫', callback_data: 'cancel_registration' }],
+        ],
+      },
+    });
     return ctx.wizard.next();
   },
   async (ctx) => {
-    if (!ctx.message?.text) return ctx.reply('Please send your surname as text.');
+    if (!ctx.message?.text) {
+      await ctx.reply('لطفاً فامیلیت رو به صورت متن بفرست! 😊');
+      return;
+    }
     ctx.wizard.state.surname = ctx.message.text;
-    await ctx.reply('Please send your phone number (e.g., 989399042848):');
+    await ctx.reply('عالیه! حالا شماره تماست رو بفرست (مثلاً 989399042848): 📞', {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'برگشت 🔙', callback_data: 'back_to_surname' }],
+          [{ text: 'لغو ثبت‌نام 🚫', callback_data: 'cancel_registration' }],
+        ],
+      },
+    });
     return ctx.wizard.next();
   },
   async (ctx) => {
-    if (!ctx.message?.text) return ctx.reply('Please send a valid phone number.');
+    if (!ctx.message?.text) {
+      await ctx.reply('لطفاً شماره تماست رو به صورت متن بفرست! 😊');
+      return;
+    }
     const phone = ctx.message.text.replace(/\D/g, '');
     if (phone !== ctx.from.id.toString()) { // Simplified check
-      await ctx.reply('Phone number must match your Telegram account.');
+      await ctx.reply('شماره تماس باید با حساب تلگرامت مطابقت داشته باشه! 😓');
       return ctx.scene.leave();
     }
     const hash = crypto.createHash('sha256').update(phone).digest('hex').slice(0, 8);
@@ -94,10 +123,30 @@ const registrationScene = new Scenes.WizardScene(
       referredBy: ctx.session.referredBy || null,
     });
     await user.save();
-    await ctx.reply(`Registration complete! Your username: ${username}\nPlease join our channel: @TradingSignals`);
+    await ctx.reply(`ثبت‌نام با موفقیت انجام شد! 🎉\nیوزرنیم تو: ${username}\nلطفاً به کانالم بپیوند: @TradingSignals`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'ورود به کانال 📢', url: 'https://t.me/TradingSignals' }],
+        ],
+      },
+    });
     return ctx.scene.leave();
   }
 );
+
+// Handle cancel and back actions
+bot.action('cancel_registration', async (ctx) => {
+  await ctx.reply('ثبت‌نام لغو شد! اگه خواستی دوباره شروع کنی، کافیه /start رو بزنی 😊');
+  return ctx.scene.leave();
+});
+bot.action('back_to_name', async (ctx) => {
+  await ctx.reply('بیا دوباره اسمت رو بگو: 😊');
+  return ctx.wizard.selectStep(0);
+});
+bot.action('back_to_surname', async (ctx) => {
+  await ctx.reply(`خب ${ctx.wizard.state.name}، حالا فامیلیت رو بگو: 🖌️`);
+  return ctx.wizard.selectStep(1);
+});
 
 // Stage setup
 const stage = new Scenes.Stage([registrationScene]);
@@ -110,7 +159,7 @@ bot.start(async (ctx) => {
   const referral = ctx.startPayload;
   if (referral) ctx.session.referredBy = referral;
   if (!user) {
-    await ctx.reply('Welcome! Let’s register you.');
+    await ctx.reply('سلام خوش اومدی! 😍 بیا با هم ثبت‌نام کنیم! 🚀');
     return ctx.scene.enter('registration');
   }
   await showMainMenu(ctx);
@@ -121,63 +170,63 @@ async function showMainMenu(ctx) {
   const user = await User.findOne({ telegramId: ctx.from.id });
   const keyboard = {
     inline_keyboard: [
-      [{ text: 'Contact Admin', callback_data: 'contact_admin' }],
-      [{ text: 'Report Issue', callback_data: 'report_issue' }],
-      [{ text: 'Submit Complaint', callback_data: 'submit_complaint' }],
-      [{ text: 'Send Suggestion', callback_data: 'send_suggestion' }],
-      [{ text: 'VIP Subscription', callback_data: 'vip_subscription' }],
-      [{ text: 'Referral Stats', callback_data: 'referral_stats' }],
-      [{ text: 'Invite Friends', callback_data: 'invite_friends' }],
+      [{ text: 'ارتباط با ادمین 📞', callback_data: 'contact_admin' }],
+      [{ text: 'گزارش مشکل 🛠️', callback_data: 'report_issue' }],
+      [{ text: 'ثبت شکایت 😡', callback_data: 'submit_complaint' }],
+      [{ text: 'ارسال پیشنهاد 💡', callback_data: 'send_suggestion' }],
+      [{ text: 'اشتراک VIP 🌟', callback_data: 'vip_subscription' }],
+      [{ text: 'آمار دعوت‌ها 📊', callback_data: 'referral_stats' }],
+      [{ text: 'دعوت از دوستان 🎉', callback_data: 'invite_friends' }],
     ],
   };
-  await ctx.reply(`Hello ${user.name}! What would you like to do?`, { reply_markup: keyboard });
+  await ctx.reply(`سلام ${user.name} جان! 😊 چیکار می‌خوای بکنی؟`, { reply_markup: keyboard });
 }
 
 // Handle callbacks
 bot.action('contact_admin', async (ctx) => {
-  await ctx.reply('Please send your message to the admin:');
+  await ctx.reply('پیامت رو برای ادمین بفرست: ✍️');
   ctx.session.waitingFor = 'admin_message';
 });
 bot.action('report_issue', async (ctx) => {
-  await ctx.reply('Please describe the issue:');
+  await ctx.reply('مشکلت رو بگو، سریع بررسی می‌کنیم! 🛠️');
   ctx.session.waitingFor = 'issue';
 });
 bot.action('submit_complaint', async (ctx) => {
-  await ctx.reply('Please describe your complaint:');
+  await ctx.reply('شکایتت رو بگو، حتماً پیگیری می‌کنیم! 😡');
   ctx.session.waitingFor = 'complaint';
 });
 bot.action('send_suggestion', async (ctx) => {
-  await ctx.reply('Please share your suggestion:');
+  await ctx.reply('پیشنهادت چیه؟ خیلی خوشحال می‌شیم بشنویم! 💡');
   ctx.session.waitingFor = 'suggestion';
 });
 bot.action('vip_subscription', async (ctx) => {
   const keyboard = {
     inline_keyboard: [
-      [{ text: '1 Month', callback_data: 'vip_1month' }],
-      [{ text: '3 Months', callback_data: 'vip_3month' }],
-      [{ text: '6 Months', callback_data: 'vip_6month' }],
-      [{ text: '12 Months', callback_data: 'vip_12month' }],
-      [{ text: 'Redeem Points', callback_data: 'redeem_points' }],
+      [{ text: '۱ ماهه (۱۰۰ تومن)', callback_data: 'vip_1month' }],
+      [{ text: '۳ ماهه (۲۵۰ تومن)', callback_data: 'vip_3month' }],
+      [{ text: '۶ ماهه (۴۵۰ تومن)', callback_data: 'vip_6month' }],
+      [{ text: '۱۲ ماهه (۸۰۰ تومن)', callback_data: 'vip_12month' }],
+      [{ text: 'استفاده از امتیازات 🌟', callback_data: 'redeem_points' }],
     ],
   };
-  await ctx.reply('Choose a VIP plan (costs are example):\n1 Month: $10\n3 Months: $25\n6 Months: $45\n12 Months: $80', { reply_markup: keyboard });
+  await ctx.reply('یه پلن VIP انتخاب کن:\n۱ ماهه: ۱۰۰ تومن\n۳ ماهه: ۲۵۰ تومن\n۶ ماهه: ۴۵۰ تومن\n۱۲ ماهه: ۸۰۰ تومن', { reply_markup: keyboard });
 });
 bot.action(/vip_(\d+)month/, async (ctx) => {
   const months = parseInt(ctx.match[1]);
-  await ctx.reply('Please send payment proof (e.g., screenshot).');
+  await ctx.reply('لطفاً مدرک پرداختت رو بفرست (مثلاً اسکرین‌شات): 📸');
   ctx.session.waitingFor = `payment_${months}`;
 });
 bot.action('redeem_points', async (ctx) => {
   const user = await User.findOne({ telegramId: ctx.from.id });
   if (user.points < 10) { // Example: 10 points for 1 month
-    await ctx.reply('Not enough points! You need 10 points for 1 month VIP.');
+    await ctx.reply('امتیاز کافی نداری! باید حداقل ۱۰ امتیاز داشته باشی برای ۱ ماه VIP. 😓');
     return;
   }
   user.points -= 10;
   user.userType = 'VIP';
   user.vipExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 1 month
   await user.save();
-  await ctx.reply('VIP activated for 1 month using 10 points!');
+  await ctx.reply('تبریک! 🎉 اشتراک VIP برای ۱ ماه با ۱۰ امتیاز فعال شد!');
 });
 bot.action('referral_stats', async (ctx) => {
   const user = await User.findOne({ telegramId: ctx.from.id });
@@ -189,23 +238,35 @@ bot.action('referral_stats', async (ctx) => {
   const totalPoints = pointsFromReferrals + pointsFromVIP;
   const pointsSpent = user.points < totalPoints ? totalPoints - user.points : 0;
   const message = `
-Your Referral Stats:
-- Total Referrals: ${referrals.length}
-- Completed Registrations: ${completed} (+${pointsFromReferrals} points)
-- VIP Subscriptions: ${vipReferrals} (+${pointsFromVIP} points)
-- Total Points Earned: ${totalPoints}
-- Points Spent: ${pointsSpent}
-- Points Remaining: ${user.points}
+📊 آمار دعوت‌های تو:
+- کل دعوت‌ها: ${referrals.length} نفر
+- ثبت‌نام کامل‌شده: ${completed} نفر (+${pointsFromReferrals} امتیاز)
+- اشتراک VIP: ${vipReferrals} نفر (+${pointsFromVIP} امتیاز)
+- کل امتیازات کسب‌شده: ${totalPoints}
+- امتیازات خرج‌شده: ${pointsSpent}
+- امتیازات باقی‌مونده: ${user.points}
 
-Keep inviting to earn more VIP time!
-Invite: ${user.referralLink}
+دوستات رو دعوت کن تا VIP بشی! 😍
+لینکت: ${user.referralLink}
   `;
-  await ctx.reply(message);
+  await ctx.reply(message, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: 'دعوت از دوستان 🎉', callback_data: 'invite_friends' }],
+      ],
+    },
+  });
 });
 bot.action('invite_friends', async (ctx) => {
   const user = await User.findOne({ telegramId: ctx.from.id });
-  const inviteText = `Join our trading bot for exclusive signals with charts, entry points, and 3 exit targets! Use my link: ${user.referralLink}`;
-  await ctx.reply(`Your invite link: ${user.referralLink}\n\nShare this:\n${inviteText}`);
+  const inviteText = `بیا به ربات ترید ما بپیوند و سیگنال‌های خفن با چارت و نقاط ورود/خروج بگیر! 🚀\nلینکم: ${user.referralLink}`;
+  await ctx.reply(`لینک دعوتت: ${user.referralLink}\n\nاینو به دوستات بفرست:\n${inviteText}`, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: 'ارسال به دوستان 📤', url: `https://t.me/share/url?url=${encodeURIComponent(inviteText)}` }],
+      ],
+    },
+  });
 });
 
 // Handle messages
@@ -223,8 +284,8 @@ bot.on('message', async (ctx) => {
         createdAt: new Date(),
       });
       await payment.save();
-      await ctx.reply('Payment proof submitted. Waiting for admin approval.');
-      await bot.telegram.sendMessage('6949308046', `New payment from ${user.username} for ${months}-month VIP. Proof: ${payment.proof}`);
+      await ctx.reply('ممنون! مدرک پرداختیت ثبت شد. منتظر تأیید ادمین باش 📅');
+      await bot.telegram.sendMessage('6949308046', `پرداخت جدید از ${user.username} برای ${months} ماه VIP. مدرک: ${payment.proof}`);
     } else if (['issue', 'complaint', 'suggestion'].includes(type)) {
       const feedback = new Feedback({
         userId: ctx.from.id,
@@ -234,15 +295,15 @@ bot.on('message', async (ctx) => {
       });
       await feedback.save();
       const responses = {
-        issue: 'Your issue has been registered. Our team will review it soon.',
-        complaint: 'Your complaint has been registered. We’ll address it promptly.',
-        suggestion: 'Thank you for your suggestion! It’s been forwarded to our team.',
+        issue: 'ممنون! مشکلت ثبت شد، تیم ما زود بررسی می‌کنه 🛠️',
+        complaint: 'شکایتت ثبت شد! حتماً پیگیری می‌کنیم 😊',
+        suggestion: 'مرسی از پیشنهادت! به تیممون فرستادم، خیلی خوبه 💡',
       };
       await ctx.reply(responses[type]);
-      await bot.telegram.sendMessage('6949308046', `${type} from ${user.username}: ${ctx.message.text}`);
+      await bot.telegram.sendMessage('6949308046', `${type} از ${user.username}: ${ctx.message.text}`);
     } else if (type === 'admin_message') {
-      await bot.telegram.sendMessage('6949308046', `Message from ${user.username}: ${ctx.message.text}`);
-      await ctx.reply('Your message has been sent to the admin.');
+      await bot.telegram.sendMessage('6949308046', `پیام از ${user.username}: ${ctx.message.text}`);
+      await ctx.reply('پیامت برای ادمین فرستاده شد! 😊');
     }
     ctx.session.waitingFor = null;
   }
@@ -251,14 +312,14 @@ bot.on('message', async (ctx) => {
 // Admin commands
 bot.command('upload_signal', async (ctx) => {
   if (ctx.from.id.toString() !== '6949308046') return;
-  await ctx.reply('Please send images and text for the signal, and specify target (Regular/VIP).');
+  await ctx.reply('سیگنال جدید می‌خوای آپلود کنی؟ 📊\nعکس‌ها و متن سیگنال رو بفرست، بعد بگو برای کیه (Regular/VIP):');
   ctx.session.waitingFor = 'signal_upload';
 });
 bot.on('photo', async (ctx) => {
   if (ctx.session.waitingFor === 'signal_upload' && ctx.from.id.toString() === '6949308046') {
     ctx.session.signal = ctx.session.signal || { images: [], text: '', target: '' };
     ctx.session.signal.images.push(ctx.message.photo[0].file_id);
-    await ctx.reply('Image received. Send more images, text, or target (Regular/VIP).');
+    await ctx.reply('عکس دریافت شد! 📸\nمی‌تونی عکس دیگه، متن، یا گروه هدف (Regular/VIP) رو بفرستی.');
   }
 });
 bot.on('text', async (ctx) => {
@@ -274,12 +335,12 @@ bot.on('text', async (ctx) => {
       });
       await signal.save();
       await distributeSignal(signal);
-      await ctx.reply('Signal saved and distributed.');
+      await ctx.reply('سیگنال با موفقیت ذخیره و پخش شد! 🎉');
       ctx.session.signal = null;
       ctx.session.waitingFor = null;
     } else {
       ctx.session.signal.text = ctx.message.text;
-      await ctx.reply('Text received. Send target (Regular/VIP) to complete.');
+      await ctx.reply('متن سیگنال دریافت شد! ✍️\nحالا بگو برای کیه (Regular یا VIP):');
     }
   }
 });
@@ -310,9 +371,9 @@ setInterval(async () => {
   for (const user of users) {
     const daysLeft = Math.ceil((user.vipExpiry - now) / (24 * 60 * 60 * 1000));
     if (daysLeft <= 3 && daysLeft > 0) {
-      await bot.telegram.sendMessage(user.telegramId, `Your VIP subscription expires in ${daysLeft} days! Renew here:`, {
+      await bot.telegram.sendMessage(user.telegramId, `اشتراک VIP تو ${daysLeft} روز دیگه تموم می‌شه! 🕒\nبیا تمدید کن:`, {
         reply_markup: {
-          inline_keyboard: [[{ text: 'Renew VIP', callback_data: 'vip_subscription' }]],
+          inline_keyboard: [[{ text: 'تمدید اشتراک 🌟', callback_data: 'vip_subscription' }]],
         },
       });
     }
@@ -320,7 +381,11 @@ setInterval(async () => {
       user.userType = 'Regular';
       user.vipExpiry = null;
       await user.save();
-      await bot.telegram.sendMessage(user.telegramId, 'Your VIP subscription has expired. Renew to continue access.');
+      await bot.telegram.sendMessage(user.telegramId, 'اشتراک VIP تو تموم شد! 😓 برای ادامه دسترسی، تمدید کن:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'تمدید اشتراک 🌟', callback_data: 'vip_subscription' }]],
+        },
+      });
     }
   }
 }, 24 * 60 * 60 * 1000); // Daily check
