@@ -67,7 +67,7 @@ const registrationScene = new Scenes.WizardScene(
     return ctx.wizard.next();
   },
   async (ctx) => {
-    if (!ctx.message?.text) {
+    if (!ctx.message || !ctx.message.text) {
       await ctx.reply('لطفاً اسمت رو به صورت متن بفرست! 😊');
       return;
     }
@@ -83,7 +83,7 @@ const registrationScene = new Scenes.WizardScene(
     return ctx.wizard.next();
   },
   async (ctx) => {
-    if (!ctx.message?.text) {
+    if (!ctx.message || !ctx.message.text) {
       await ctx.reply('لطفاً فامیلیت رو به صورت متن بفرست! 😊');
       return;
     }
@@ -99,7 +99,7 @@ const registrationScene = new Scenes.WizardScene(
     return ctx.wizard.next();
   },
   async (ctx) => {
-    if (!ctx.message?.text) {
+    if (!ctx.message || !ctx.message.text) {
       await ctx.reply('لطفاً شماره تماست رو به صورت متن بفرست! 😊');
       return;
     }
@@ -108,22 +108,22 @@ const registrationScene = new Scenes.WizardScene(
       await ctx.reply('شماره تماس باید با حساب تلگرامت مطابقت داشته باشه! 😓');
       return ctx.scene.leave();
     }
+    const user = await User.findOne({ telegramId: ctx.from.id });
+    if (!user) {
+      await ctx.reply('یه مشکلی پیش اومد، لطفاً دوباره امتحان کن! 😓');
+      return ctx.scene.leave();
+    }
+    user.name = ctx.wizard.state.name;
+    user.surname = ctx.wizard.state.surname;
+    user.phone = phone;
+    user.joinDate = new Date();
     const hash = crypto.createHash('sha256').update(phone).digest('hex').slice(0, 8);
-    const username = `DExtrading_${hash}`;
-    const referralLink = `t.me/${ctx.botInfo.username}?start=${username}`;
-    const user = new User({
-      telegramId: ctx.from.id,
-      name: ctx.wizard.state.name,
-      surname: ctx.wizard.state.surname,
-      phone,
-      username,
-      joinDate: new Date(),
-      referralLink,
-      ipAddress: ctx.message.from.ip || 'unknown',
-      referredBy: ctx.session.referredBy || null,
-    });
+    user.username = `DExtrading_${hash}`;
+    user.referralLink = `t.me/${ctx.botInfo.username}?start=${user.username}`;
+    user.ipAddress = ctx.message.from.ip || 'unknown';
+    user.referredBy = ctx.session.referredBy || null;
     await user.save();
-    await ctx.reply(`ثبت‌نام با موفقیت انجام شد! 🎉\nیوزرنیم تو: ${username}\nلطفاً به کانالم بپیوند: @TradingSignals`, {
+    await ctx.reply(`ثبت‌نام با موفقیت انجام شد! 🎉\nیوزرنیم تو: ${user.username}\nلطفاً به کانالم بپیوند: @TradingSignals`, {
       reply_markup: {
         inline_keyboard: [
           [{ text: 'ورود به کانال 📢', url: 'https://t.me/TradingSignals' }],
@@ -136,8 +136,21 @@ const registrationScene = new Scenes.WizardScene(
 
 // Handle cancel and back actions
 bot.action('cancel_registration', async (ctx) => {
-  await ctx.reply('ثبت‌نام لغو شد! اگه خواستی دوباره شروع کنی، کافیه /start رو بزنی 😊');
+  await ctx.reply('ثبت‌نام لغو شد! 😊 می‌تونی از منوی زیر استفاده کنی:', {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: 'ارتباط با ادمین 📞', callback_data: 'contact_admin' }],
+        [{ text: 'گزارش مشکل 🛠️', callback_data: 'report_issue' }],
+        [{ text: 'ثبت شکایت 😡', callback_data: 'submit_complaint' }],
+        [{ text: 'ارسال پیشنهاد 💡', callback_data: 'send_suggestion' }],
+        [{ text: 'دوباره ثبت‌نام کن 🚀', callback_data: 'restart_registration' }],
+      ],
+    },
+  });
   return ctx.scene.leave();
+});
+bot.action('restart_registration', async (ctx) => {
+  return ctx.scene.enter('registration');
 });
 bot.action('back_to_name', async (ctx) => {
   await ctx.reply('بیا دوباره اسمت رو بگو: 😊');
@@ -155,10 +168,16 @@ bot.use(stage.middleware());
 
 // Start command
 bot.start(async (ctx) => {
-  const user = await User.findOne({ telegramId: ctx.from.id });
+  let user = await User.findOne({ telegramId: ctx.from.id });
   const referral = ctx.startPayload;
   if (referral) ctx.session.referredBy = referral;
   if (!user) {
+    // Create a temporary user entry to allow access to menu
+    user = new User({
+      telegramId: ctx.from.id,
+      userType: 'Regular',
+    });
+    await user.save();
     await ctx.reply('سلام خوش اومدی! 😍 بیا با هم ثبت‌نام کنیم! 🚀');
     return ctx.scene.enter('registration');
   }
@@ -179,7 +198,7 @@ async function showMainMenu(ctx) {
       [{ text: 'دعوت از دوستان 🎉', callback_data: 'invite_friends' }],
     ],
   };
-  await ctx.reply(`سلام ${user.name} جان! 😊 چیکار می‌خوای بکنی؟`, { reply_markup: keyboard });
+  await ctx.reply(`سلام ${user.name || 'دوست عزیز'}! 😊 چیکار می‌خوای بکنی؟`, { reply_markup: keyboard });
 }
 
 // Handle callbacks
@@ -271,8 +290,16 @@ bot.action('invite_friends', async (ctx) => {
 
 // Handle messages
 bot.on('message', async (ctx) => {
-  const user = await User.findOne({ telegramId: ctx.from.id });
-  if (!user) return ctx.scene.enter('registration');
+  let user = await User.findOne({ telegramId: ctx.from.id });
+  if (!user) {
+    user = new User({
+      telegramId: ctx.from.id,
+      userType: 'Regular',
+    });
+    await user.save();
+    await ctx.reply('سلام خوش اومدی! 😍 بیا با هم ثبت‌نام کنیم! 🚀');
+    return ctx.scene.enter('registration');
+  }
   if (ctx.session.waitingFor) {
     const type = ctx.session.waitingFor;
     if (type.startsWith('payment_')) {
@@ -399,11 +426,6 @@ setInterval(async () => {
   }
 }, 24 * 60 * 60 * 1000); // Daily update
 
-// Start bot
-bot.launch();
-console.log('Bot running...');
-
-// Webhook for Vercel
-if (process.env.NODE_ENV === 'production') {
-  bot.webhookCallback('/bot');
-}
+// Start bot with Polling
+bot.launch({ dropPendingUpdates: true });
+console.log('Bot running with polling...');
